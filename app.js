@@ -4,6 +4,7 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ejs = require("ejs");
 const _ = require("lodash");
+const mongoose = require("mongoose");
 
 const homeStartingContent =
   "Lacus vel facilisis volutpat est velit egestas dui id ornare. Semper auctor neque vitae tempus quam. Sit amet cursus sit amet dictum sit amet justo. Viverra tellus in hac habitasse. Imperdiet proin fermentum leo vel orci porta. Donec ultrices tincidunt arcu non sodales neque sodales ut. Mattis molestie a iaculis at erat pellentesque adipiscing. Magnis dis parturient montes nascetur ridiculus mus mauris vitae ultricies. Adipiscing elit ut aliquam purus sit amet luctus venenatis lectus. Ultrices vitae auctor eu augue ut lectus arcu bibendum at. Odio euismod lacinia at quis risus sed vulputate odio ut. Cursus mattis molestie a iaculis at erat pellentesque adipiscing.";
@@ -12,14 +13,29 @@ const aboutContent =
 const contactContent =
   "Scelerisque eleifend donec pretium vulputate sapien. Rhoncus urna neque viverra justo nec ultrices. Arcu dui vivamus arcu felis bibendum. Consectetur adipiscing elit duis tristique. Risus viverra adipiscing at in tellus integer feugiat. Sapien nec sagittis aliquam malesuada bibendum arcu vitae. Consequat interdum varius sit amet mattis. Iaculis nunc sed augue lacus. Interdum posuere lorem ipsum dolor sit amet consectetur adipiscing elit. Pulvinar elementum integer enim neque. Ultrices gravida dictum fusce ut placerat orci nulla. Mauris in aliquam sem fringilla ut morbi tincidunt. Tortor posuere ac ut consequat semper viverra nam libero.";
 
-const posts = [];
-
 const app = express();
 
 app.set("view engine", "ejs");
 
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static("public"));
+mongoose.connect("mongodb://localhost/test", {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
+
+const db = mongoose.connection;
+db.on("error", console.error.bind(console, "connection error:"));
+db.once("open", function () {
+  // we're connected!
+});
+
+const entrySchema = new mongoose.Schema({
+  title: String,
+  body: String
+});
+
+const Entry = mongoose.model("Entry", entrySchema);
 
 // HOME
 app.get("/", (req, res) => {
@@ -27,10 +43,16 @@ app.get("/", (req, res) => {
     return _.truncate(postBody, { length: 200 });
   };
 
-  res.render("home", {
-    homeStartingContent,
-    posts,
-    truncate
+  Entry.find((err, posts) => {
+    if (err) {
+      console.log(err);
+    } else {
+      res.render("home", {
+        homeStartingContent,
+        posts,
+        truncate
+      });
+    }
   });
 });
 
@@ -54,33 +76,33 @@ app.get("/compose", (req, res) => {
 });
 
 // POST page
-app.get("/posts/:name", (req, res) => {
-  const requestedName = _.lowerCase(req.params.name);
+app.get("/posts/:id", (req, res) => {
+  const entryId = req.params.id;
 
-  posts.forEach(post => {
-    const storedName = _.lowerCase(post.title);
-
-    if (storedName === requestedName) {
+  Entry.findOne({ _id: entryId }, (err, post) => {
+    if (err) {
+      console.log(err);
+      res.end();
+    } else {
       res.render("post", {
         post
       });
-    } else {
-      console.log("No Posts Found");
-      res.end();
     }
   });
 });
 
 // COMPOSE send form
 app.post("/", (req, res) => {
-  const post = {
+  const post = new Entry({
     title: req.body.title,
     body: req.body.body
-  };
+  });
 
-  posts.push(post);
-
-  res.redirect("/");
+  post.save(err => {
+    if (!err) {
+      res.redirect("/");
+    }
+  });
 });
 
 app.listen(3000, function () {
